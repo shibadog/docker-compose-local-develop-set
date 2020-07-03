@@ -1,0 +1,173 @@
+version: "3.7"
+
+x-networks: &es7-network
+  networks:
+    - esnet
+
+networks:
+  esnet:
+
+x-es7-common: &es7-common
+    image: docker.elastic.co/elasticsearch/elasticsearch:${VERSION}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+x-es7-option: &es7-option
+      # クラスタ名
+      cluster.name: 'docker-cluster'
+      # ノードあたりの割当メモリ
+      ES_JAVA_OPTS: '-Xms512m -Xmx512m'
+      # スワップ無効化
+      bootstrap.memory_lock: 'true'
+      # モニタリング有効化
+      xpack.monitoring.collection.enabled: 'true'
+
+# Dataノード
+x-es7-node: &es7-node
+    <<: *es7-common
+    <<: *es7-network
+    environment:
+      <<: *es7-option
+      node.master: "false"
+      node.data: "true"
+      node.ingest: "true"
+      discovery.seed_hosts: "elasticsearch"
+    labels:
+      co.elastic.logs/module: elasticsearch
+      co.elastic.logs/fileset.stdout: server
+
+# Masterノード
+x-es7-master: &es7-master
+    <<: *es7-common
+    <<: *es7-network
+    environment:
+      <<: *es7-option
+      node.master: "true"
+      node.data: "false"
+      node.ingest: "false"
+      cluster.initial_master_nodes: "elasticsearch"
+      node.name: "elasticsearch"
+    # ノード数に応じて変更する
+    depends_on: 
+      - "elasticsearch-data1"
+      - "elasticsearch-data2"
+      - "elasticsearch-data3"
+    labels:
+      co.elastic.logs/module: elasticsearch
+      co.elastic.logs/fileset.stdout: server
+
+# ノード数に応じて変更する
+volumes:
+  es7-master1:
+  es7-master1-log:
+  es7-data1:
+  es7-data1-log:
+  es7-data2:
+  es7-data2-log:
+  es7-data3:
+  es7-data3-log:
+  es7-apm-log:
+
+## ElasticStack
+services:
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${VERSION}
+    ports: [ '5601:5601']
+    depends_on: [ 'elasticsearch' ]
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    labels:
+      co.elastic.logs/module: kibana
+      co.elastic.logs/fileset.stdout: log
+    <<: *es7-network
+
+  elasticsearch:
+    ports:
+      - "9200:9200"
+    volumes:
+      - 'es7-master1:/usr/share/elasticsearch/data'
+      - 'es7-master1-log:/usr/share/elasticsearch/logs'
+    <<: *es7-master
+
+  # ノード数に応じて変更する
+  elasticsearch-data1:
+    volumes:
+      - 'es7-data1:/usr/share/elasticsearch/data'
+      - 'es7-data1-log:/usr/share/elasticsearch/logs'
+    <<: *es7-node
+
+  elasticsearch-data2:
+    volumes:
+      - 'es7-data2:/usr/share/elasticsearch/data'
+      - 'es7-data2-log:/usr/share/elasticsearch/logs'
+    <<: *es7-node
+
+  elasticsearch-data3:
+    volumes:
+      - 'es7-data3:/usr/share/elasticsearch/data'
+      - 'es7-data3-log:/usr/share/elasticsearch/logs'
+    <<: *es7-node
+
+  apm-server:
+    image: docker.elastic.co/apm/apm-server:${VERSION}
+    volumes:
+      - "./conf/apm-server.docker.yml:/usr/share/apm-server/apm-server.yml:ro"
+      - 'es7-apm-log:/usr/share/apm-server/logs'
+    environment: 
+      - output.elasticsearch.hosts=["elasticsearch:9200"]
+    ports:
+      - "8200:8200"
+    expose:
+      - 8200
+    depends_on: 
+      - elasticsearch
+    <<: *es7-network
+
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:${VERSION}
+    environment: 
+      - output.elasticsearch.hosts=["elasticsearch:9200"]
+      - MYSQL_ACCESS=app-database:3306
+    user: root
+    volumes: 
+      - ./conf/metricbeat.docker.yml:/usr/share/metricbeat/metricbeat.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
+    <<: *es7-network
+
+  filebeat:
+    hostname: filebeat
+    image: docker.elastic.co/beats/filebeat:${VERSION}
+    user: root
+    environment: 
+      - strict.perms=false
+      - output.elasticsearch.hosts=["elasticsearch:9200"]
+    volumes:
+      - ./conf/filebeat.docker.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - es7-master1-log:/var/log/elasticsearch-master1:ro
+      - es7-data1-log:/var/log/elasticsearch-data1:ro
+      - es7-data2-log:/var/log/elasticsearch-data2:ro
+      - es7-data3-log:/var/log/elasticsearch-data3:ro
+      - es7-apm-log:/var/log/elasticsearch-apm:ro
+    <<: *es7-network
+
+  heartbeat:
+    image: docker.elastic.co/beats/heartbeat:${VERSION}
+    environment:
+      - strict.perms=false
+      - output.elasticsearch.hosts=["elasticsearch:9200"]
+      - heartbeat.monitors.
+    volumes:
+      - ./conf/heartbeat.docker.yml:/usr/share/heartbeat/heartbeat.yml:ro
+    <<: *es7-network
+
+  metricbeat-setup:
+    image: docker.elastic.co/beats/metricbeat:${VERSION}
+    container_name: metricbeat-setup
+    user: root
+    command: "setup --dashboards -E setup.kibana.host=kibana:5601"
+    <<: *es7-network
