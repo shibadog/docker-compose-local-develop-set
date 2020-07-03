@@ -20,10 +20,7 @@ filebeat.autodiscover:
   providers:
     - type: docker
       hints.enabled: true
-      json:
-        keys_under_root: true
-        add_error_key: true
-        ignore_decoding_error: true
+      json.message_key: log
       templates:
         - condition:
             contains:
@@ -34,6 +31,15 @@ filebeat.autodiscover:
                 enabled: true
                 var.paths:
                   - /var/lib/docker/containers/${data.docker.container.id}/*.log
+        - condition:
+            equals:
+              docker.container.labels.log-schema: webapp
+          config:
+            - type: docker
+              containers.ids:
+                - "${data.docker.container.id}"
+              json.keys_under_root: true
+              json.add_error_key: false
 
 processors:
   - add_cloud_metadata: ~
