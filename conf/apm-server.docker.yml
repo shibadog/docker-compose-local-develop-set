@@ -239,7 +239,7 @@ apm-server:
     # An origin is made of a protocol scheme, host and port, without the url path.
     # Allowed origins in this setting can have * to match anything (eg.: http://*.example.com)
     # If an item in the list is a single '*', everything will be allowed.
-    allow_origins : ['http://localhost:8082', 'http://localhost:8080']
+    allow_origins : ['http://localhost:8082', 'http://localhost:8080', 'https://localhost:8443']
 
     # A list of Access-Control-Allow-Headers to allow RUM requests, in addition to "Content-Type",
     # "Content-Encoding", and "Accept"
