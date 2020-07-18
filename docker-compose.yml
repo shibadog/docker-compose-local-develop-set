@@ -171,3 +171,13 @@ services:
     user: root
     command: "setup --dashboards -E setup.kibana.host=kibana:5601"
     <<: *es7-network
+
+  zipkin:
+    image: openzipkin/zipkin:latest
+    environment:
+      - STORAGE_TYPE=elasticsearch
+      - ES_HOSTS=http://elasticsearch:9200
+      - ES_HTTP_LOGGING=BASIC
+    ports:
+      - 9411:9411
+    <<: *es7-network

@@ -24,6 +24,12 @@ metricbeat.modules:
   period: 10s
   enabled: true
 
+- module: prometheus
+  period: 10s
+  metricsets: ["collector"]
+  hosts: ["zipkin:9411"]
+  metrics_path: /prometheus
+
 processors:
   - add_cloud_metadata: ~
 
