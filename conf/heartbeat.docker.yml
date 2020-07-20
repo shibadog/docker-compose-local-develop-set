@@ -2,7 +2,7 @@ heartbeat.monitors:
 - type: http
   schedule: '@every 5s'
   urls:
-    - http://elasticsearch:9200/health
+    - http://elasticsearch:9200
     - http://kibana:5601/api/status
     - http://apm-server:8200
     - http://zipkin:9411/health
